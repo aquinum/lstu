@@ -14,54 +14,6 @@ sub run {
     my $c = shift;
     my @args = @_;
 
-    my $cfile = Mojo::File->new($Bin, '..' , 'lstu.conf');
-    if (defined $ENV{MOJO_CONFIG}) {
-        $cfile = Mojo::File->new($ENV{MOJO_CONFIG});
-        unless (-e $cfile->to_abs) {
-            $cfile = Mojo::File->new($Bin, '..', $ENV{MOJO_CONFIG});
-        }
-    }
-    my $config = $c->app->plugin('Config', {
-        file    => $cfile,
-        default =>  {
-            prefix                 => '/',
-            provisioning           => 100,
-            provis_step            => 5,
-            length                 => 8,
-            secret                 => ['hfudsifdsih'],
-            page_offset            => 10,
-            theme                  => 'default',
-            ban_min_strike         => 3,
-            ban_whitelist          => [],
-            ban_blacklist          => [],
-            minion                 => {
-                enabled => 0,
-                db_path => 'minion.db'
-            },
-            session_duration       => 3600,
-            dbtype                 => 'sqlite',
-            db_path                => 'lstu.db',
-            max_redir              => 2,
-            skip_spamhaus          => 0,
-            memcached_servers      => [],
-            x_frame_options        => 'DENY',
-            x_content_type_options => 'nosniff',
-            x_xss_protection       => '1; mode=block',
-            log_creator_ip         => 0,
-        }
-    });
-
-    if (scalar(@{$config->{memcached_servers}})) {
-        $c->app->plugin(CHI => {
-            lstu_urls_cache => {
-                driver             => 'Memcached',
-                servers            => $config->{memcached_servers},
-                expires_in         => '1 day',
-                expires_on_backend => 1,
-            }
-        });
-    }
-
     getopt \@args,
       'info=s{1,}'   => \my @info,
       'r|remove=s{1,}' => \my @remove,
@@ -79,11 +31,13 @@ sub run {
         );
     }
     if (scalar @remove) {
+        my @ips;
         c(@remove)->each(
             sub {
                 my ($e, $num) = @_;
                 my $u = get_short($c, $e);
                 if ($u) {
+                    push @ips, $u->created_by if $u->created_by;
                     print_infos($u->to_hash);
                     my $confirm = ($yes) ? 'yes' : undef;
                     unless (defined $confirm) {
@@ -92,10 +46,7 @@ sub run {
                         chomp $confirm;
                     }
                     if ($confirm =~ m/^y(es)?$/i) {
-                        if ($u->delete) {
-                            if (scalar(@{$config->{memcached_servers}})) {
-                                $c->app->chi('lstu_urls_cache')->remove($e);
-                            }
+                        if ($u->remove) {
                             say sprintf('Success: %s URL has been removed', $e);
                         } else {
                             say sprintf('Failure: %s URL has not been removed', $e);
@@ -106,28 +57,35 @@ sub run {
                 }
             }
         );
+        say sprintf("If you want to ban the uploaders' IPs, please do:\n  carton exec script/lstu ban --ban %s", join(' ', @ips)) if @ips;
     }
     if ($search) {
         my $u = Lstu::DB::URL->new(app => $c->app)->search_url($search);
         my @shorts;
+        my @ips;
         $u->each(sub {
             my ($e, $num) = @_;
             push @shorts, $e->{short};
+            push @ips, $e->{created_by} if $e->{created_by};
             print_infos($e);
         });
         say sprintf('%d matching URLs', $u->size);
         say sprintf("If you want to delete those URLs, please do:\n  carton exec script/lstu url --remove %s", join(' ', @shorts)) if @shorts;
+        say sprintf("If you want to ban those IPs, please do:\n  carton exec script/lstu ban --ban %s", join(' ', @ips)) if @ips;
     }
     if ($ip) {
         my $u = Lstu::DB::URL->new(app => $c->app)->search_creator($ip);
         my @shorts;
+        my @ips;
         $u->each(sub {
             my ($e, $num) = @_;
             push @shorts, $e->{short};
+            push @ips, $e->{created_by} if $e->{created_by};
             print_infos($e);
         });
         say sprintf('%d matching URLs', $u->size);
         say sprintf("If you want to delete those URLs, please do:\n  carton exec script/lstu url --remove %s", join(' ', @shorts)) if @shorts;
+        say sprintf("If you want to ban those IPs, please do:\n  carton exec script/lstu ban --ban %s", join(' ', @ips)) if @ips;
     }
 }
 
@@ -136,7 +94,7 @@ sub get_short {
     my $short = shift;
 
     my $u = Lstu::DB::URL->new(app => $c->app, short => $short);
-    if ($u->url) {
+    if ($u->url && !$u->disabled) {
         return $u;
     } else {
         say sprintf('Sorry, unable to find an URL with short = %s', $short);

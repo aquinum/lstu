@@ -1,5 +1,30 @@
 Revision history for Perl application Lstu
 
+0.22-0 ????-??-??
+	- Disable URLs instead of removing them (prevents spammers to reuse a
+	  deleted shortened URL)
+	- Slugify custom URLs and add a suffix (-2, -3…) if the custom URL is
+	  already taken
+
+0.21-4 2018-12-17
+	- Add a lockfile to GSB database update to prevent concurrent updates
+
+0.21-3 2018-11-19
+	- Fix Pg sessions and urls delete fonctions
+
+0.21-2 2018-11-19
+	- Fix URL removal in memcached from safebrowsingcheck and url commands
+
+0.21-1 2018-10-17
+	- Fix URL removal in memcached from safebrowsingcheck command
+
+0.21-0 2018-10-17
+	- Allow to delete URLs and ban IPs from safebrowsingcheck
+	- Add ban CLI tool for banning and unbanning IP addresses
+
+0.20-2 2018-10-07
+	- Handle very long URLs
+
 0.20-1 2018-09-20
 	- Fix safebrowsingcheck CLI help message
 

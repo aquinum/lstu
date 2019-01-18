@@ -2,8 +2,6 @@
 package Lstu::DB::Session::Pg;
 use Mojo::Base 'Lstu::DB::Session';
 
-has 'record' => 0;
-
 sub new {
     my $c = shift;
 
@@ -14,7 +12,7 @@ sub new {
     return $c;
 }
 
-sub delete {
+sub remove {
     my $c = shift;
 
     my $h = $c->app->dbi->db->query('DELETE FROM sessions WHERE token = ? RETURNING *', $c->token)->hashes;

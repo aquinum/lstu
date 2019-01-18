@@ -25,9 +25,9 @@ sub register {
         my $sql        = Mojo::SQLite->new('sqlite:'.$app->config('db_path'));
         my $migrations = $sql->migrations;
         if ($app->mode eq 'development' && $ENV{LSTU_DEBUG}) {
-            $migrations->from_file('utilities/migrations/sqlite.sql')->migrate(0)->migrate(2);
+            $migrations->from_file('utilities/migrations/sqlite.sql')->migrate(0)->migrate(3);
         } else {
-            $migrations->from_file('utilities/migrations/sqlite.sql')->migrate(2);
+            $migrations->from_file('utilities/migrations/sqlite.sql')->migrate(3);
         }
     } elsif ($app->config('dbtype') eq 'postgresql') {
         require Mojo::Pg;
@@ -36,9 +36,9 @@ sub register {
         # Database migration
         my $migrations = Mojo::Pg::Migrations->new(pg => $app->dbi);
         if ($app->mode eq 'development' && $ENV{LSTU_DEBUG}) {
-            $migrations->from_file('utilities/migrations/postgresql.sql')->migrate(0)->migrate(3);
+            $migrations->from_file('utilities/migrations/postgresql.sql')->migrate(0)->migrate(4);
         } else {
-            $migrations->from_file('utilities/migrations/postgresql.sql')->migrate(3);
+            $migrations->from_file('utilities/migrations/postgresql.sql')->migrate(4);
         }
     } elsif ($app->config('dbtype') eq 'mysql') {
         require Mojo::mysql;
@@ -47,9 +47,9 @@ sub register {
         # Database migration
         my $migrations = Mojo::mysql::Migrations->new(mysql => $app->dbi);
         if ($app->mode eq 'development' && $ENV{LSTU_DEBUG}) {
-            $migrations->from_file('utilities/migrations/mysql.sql')->migrate(0)->migrate(2);
+            $migrations->from_file('utilities/migrations/mysql.sql')->migrate(0)->migrate(3);
         } else {
-            $migrations->from_file('utilities/migrations/mysql.sql')->migrate(2);
+            $migrations->from_file('utilities/migrations/mysql.sql')->migrate(3);
         }
     }
 
@@ -221,12 +221,19 @@ sub _gsb {
             storage => Net::Google::SafeBrowsing4::Storage::File->new(path => Mojo::File->new($Bin, '..' , 'safebrowsing_db')),
         );
 
+        my $lock_file = Mojo::File->new($Bin, '..', 'gsb.lock');
         if ($force_update) {
+            $lock_file->touch;
             $gsb->update();
+            $lock_file->remove_tree;
         } elsif ($check) {
-            my $update = Mojo::File->new($Bin, '..' , 'safebrowsing_db')->to_string;
-            my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($update);
-            $gsb->update() if $mtime < time - 86400;
+            if (! -e $lock_file->to_string) {
+                $lock_file->touch;
+                my $update = Mojo::File->new($Bin, '..' , 'safebrowsing_db')->to_string;
+                my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($update);
+                $gsb->update() if $mtime < time - 86400;
+                $lock_file->remove_tree;
+            }
         }
 
         return $gsb;

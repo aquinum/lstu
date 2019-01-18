@@ -7,6 +7,8 @@ has 'url';
 has 'counter' => 0;
 has 'timestamp';
 has 'created_by';
+has 'disabled' => 0;
+has 'record' => 0;
 has 'app';
 
 =head1 NAME
@@ -33,6 +35,8 @@ Have a look at Lstu::DB::URL::SQLite's code: it's simple and may be more underst
 =item B<timestamp>  : unix timestamp
 
 =item B<created_by> : the IP address of the creator
+
+=item B<disabled>   : boolean (0 or 1), is the URL active?
 
 =item B<app>        : a mojolicious object
 
@@ -106,6 +110,18 @@ sub to_hash {
 
 =back
 
+=cut
+
+sub increment_counter {
+    my $c = shift;
+
+    $c->app->dbi->db->query('UPDATE lstu SET counter = counter + 1 WHERE short = ?', $c->short);
+    my $h = $c->app->dbi->db->query('SELECT counter FROM lstu WHERE short = ?', $c->short)->hashes->first;
+    $c->counter($h->{counter});
+
+    return $c;
+}
+
 =head2 write
 
 =over 1
@@ -126,28 +142,44 @@ sub write {
     my $c     = shift;
 
     if ($c->record) {
-        $c->app->dbi->db->query('UPDATE lstu SET url = ?, counter = ?, timestamp = ?, created_by = ? WHERE short = ?', $c->url, $c->counter, $c->timestamp, $c->created_by, $c->short);
+        $c->app->dbi->db->query('UPDATE lstu SET url = ?, counter = ?, timestamp = ?, created_by = ?, disabled = ? WHERE short = ?', $c->url, $c->counter, $c->timestamp, $c->created_by, $c->disabled, $c->short);
     } else {
-        $c->app->dbi->db->query('INSERT INTO lstu (short, url, counter, timestamp, created_by) VALUES (?, ?, ?, ?, ?)', $c->short, $c->url, $c->counter, $c->timestamp, $c->created_by);
+        $c->app->dbi->db->query('INSERT INTO lstu (short, url, counter, timestamp, created_by, disabled) VALUES (?, ?, ?, ?, ?, ?)', $c->short, $c->url, $c->counter, $c->timestamp, $c->created_by, $c->disabled);
         $c->record(1);
     }
 
     return $c;
 }
 
-=head2 delete
+=head2 remove
 
 =over 1
 
-=item B<Usage>     : C<$c-E<gt>delete>
+=item B<Usage>     : C<$c-E<gt>remove>
 
 =item B<Arguments> : none
 
-=item B<Purpose>   : delete the URL record from the database
+=item B<Purpose>   : remove the URL record from the database
 
 =item B<Returns>   : 1 for success, 0 for failure
 
 =back
+
+=cut
+
+sub remove {
+    my $c = shift;
+
+    $c->app->dbi->db->query('UPDATE lstu SET disabled = 1 WHERE short = ?', $c->short);
+    my $disabled = $c->app->dbi->db->query('SELECT disabled FROM lstu WHERE short = ?', $c->short)->hashes->first->{disabled};
+    if ($disabled) {
+        if (scalar(@{$c->app->config('memcached_servers')})) {
+            $c->app->chi('lstu_urls_cache')->remove($c->short);
+        }
+        $c = Lstu::DB::URL->new(app => $c->app);
+    }
+    return $disabled;
+}
 
 =head2 exist
 
@@ -460,6 +492,7 @@ sub _slurp {
         $c->counter($h->first->{counter});
         $c->timestamp($h->first->{timestamp});
         $c->created_by($h->first->{created_by});
+        $c->disabled($h->first->{disabled});
         $c->record(1);
     }
 

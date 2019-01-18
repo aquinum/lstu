@@ -1,5 +1,5 @@
 requires 'inc::Module::Install::DSL';
-requires 'Mojolicious', '>= 7.33';
+requires 'Mojolicious', '>= 8.09';
 requires 'Data::Validate::URI';
 requires 'Net::Domain::TLD', '>= 1.74';
 requires 'Mojolicious::Plugin::I18N';
@@ -49,6 +49,6 @@ feature 'mysql', 'MySQL support' => sub {
 };
 
 feature 'safebrowsing', 'Check URLs against Google safebrowsing database' => sub {
-    requires 'Net::Google::SafeBrowsing4';
+    requires 'Net::Google::SafeBrowsing4', '>= 0.8';
     requires 'Term::ProgressBar::Quiet';
 };
